@@ -1,0 +1,10 @@
+aiogram==3.13.1          # любая актуальная 3.x
+python-dotenv==1.0.1
+gspread==6.1.2
+google-auth==2.35.0
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.154.0
+
+# опционально для тестов и логирования
+pytest==8.3.3
+pytest-asyncio==0.24.0
