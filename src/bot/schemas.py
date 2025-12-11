@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 
+# Колонки листа Participants
 PARTICIPANTS_COLUMNS: List[str] = [
     "Время обновления",
     "Telegram ID",
@@ -21,6 +22,27 @@ PARTICIPANTS_COLUMNS: List[str] = [
     "Инфо о получателе",
     "Уведомлён",
     "Комментарий администратора",
+]
+
+
+# Колонки листа Polls
+POLLS_COLUMNS: List[str] = [
+    "ID",
+    "Вопрос",
+    "Варианты",
+    "Правильный индекс",
+    "Очки",
+    "Статус",
+]
+
+
+# Колонки листа PollResponses
+POLL_RESPONSES_COLUMNS: List[str] = [
+    "Poll ID",
+    "Telegram ID",
+    "Ответ",
+    "Правильный",
+    "Время ответа",
 ]
 
 
@@ -111,4 +133,86 @@ class Participant:
             self.recipient_info or "",
             _bool(self.notified),
             self.admin_comment or "",
+        ]
+
+
+@dataclass
+class PollQuestion:
+    poll_id: str
+    question: str
+    options: List[str]
+    correct_index: Optional[int]
+    points: int
+    status: str  # e.g. active, draft, closed
+
+    @classmethod
+    def from_row(cls, row: List[str]) -> "PollQuestion":
+        def _get(i: int) -> str:
+            return row[i] if i < len(row) else ""
+
+        poll_id = _get(0) or ""
+        question = _get(1) or ""
+        options_raw = _get(2) or ""
+        options = [opt.strip() for opt in options_raw.split("|") if opt.strip()]
+        correct_raw = _get(3)
+        correct_index = int(correct_raw) if correct_raw.isdigit() else None
+        points_raw = _get(4)
+        points = int(points_raw) if points_raw.isdigit() else 0
+        status = _get(5) or "draft"
+        return cls(
+            poll_id=poll_id,
+            question=question,
+            options=options,
+            correct_index=correct_index,
+            points=points,
+            status=status,
+        )
+
+    def to_row(self) -> List[str]:
+        return [
+            self.poll_id,
+            self.question,
+            "|".join(self.options),
+            str(self.correct_index) if self.correct_index is not None else "",
+            str(self.points),
+            self.status,
+        ]
+
+
+@dataclass
+class PollResponse:
+    poll_id: str
+    tg_id: int
+    answer_index: int
+    is_correct: bool
+    submitted_at: str
+
+    @classmethod
+    def from_row(cls, row: List[str]) -> "PollResponse":
+        def _get(i: int) -> str:
+            return row[i] if i < len(row) else ""
+
+        poll_id = _get(0) or ""
+        tg_raw = _get(1)
+        answer_raw = _get(2)
+        correct_raw = _get(3)
+        submitted = _get(4) or ""
+        return cls(
+            poll_id=poll_id,
+            tg_id=int(tg_raw) if tg_raw else 0,
+            answer_index=int(answer_raw) if answer_raw.isdigit() else -1,
+            is_correct=correct_raw.upper() == "TRUE",
+            submitted_at=submitted,
+        )
+
+    def to_row(self) -> List[str]:
+        def _bool(v: bool) -> str:
+            return "TRUE" if v else "FALSE"
+
+        return [
+            self.poll_id,
+            str(self.tg_id),
+            str(self.answer_index),
+            _bool(self.is_correct),
+            self.submitted_at,
         ]

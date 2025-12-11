@@ -8,6 +8,8 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 
+from .schemas import PollQuestion
+
 # ---------- Пользовательские клавиатуры ----------
 
 
@@ -68,6 +70,21 @@ def cancel_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True,
     )
+
+
+def quiz_options_kb(poll: PollQuestion) -> InlineKeyboardMarkup:
+    """
+    Клавиатура для вариантов викторины.
+    """
+    buttons = []
+    for idx, option in enumerate(poll.options):
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{idx + 1}. {option}",
+                callback_data=f"quiz_answer:{poll.poll_id}:{idx}",
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 # ---------- Админские клавиатуры ----------

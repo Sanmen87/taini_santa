@@ -21,6 +21,7 @@ class SheetsConfig:
     spreadsheet_id: str
     participants_sheet: str
     polls_sheet: str
+    poll_responses_sheet: str
     achievements_sheet: str
     service_account_json: str  # путь к файлу
 
@@ -57,6 +58,7 @@ def get_settings() -> Settings:
             spreadsheet_id=os.environ["GSHEET_SPREADSHEET_ID"],
             participants_sheet=os.getenv("GSHEET_PARTICIPANTS_SHEET_NAME", "Participants"),
             polls_sheet=os.getenv("GSHEET_POLLS_SHEET_NAME", "Polls"),
+            poll_responses_sheet=os.getenv("GSHEET_POLL_RESPONSES_SHEET_NAME", "PollResponses"),
             achievements_sheet=os.getenv("GSHEET_ACHIEVEMENTS_SHEET_NAME", "Achievements"),
             service_account_json=os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"],
         ),

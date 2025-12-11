@@ -68,6 +68,10 @@ class SheetClient:
         settings = get_settings()
         return self.spreadsheet.worksheet(settings.sheets.polls_sheet)
 
+    def poll_responses_sheet(self) -> gspread.Worksheet:
+        settings = get_settings()
+        return self.spreadsheet.worksheet(settings.sheets.poll_responses_sheet)
+
     def achievements_sheet(self) -> gspread.Worksheet:
         settings = get_settings()
         return self.spreadsheet.worksheet(settings.sheets.achievements_sheet)

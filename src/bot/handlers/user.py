@@ -17,12 +17,13 @@ from ..keyboards import (
     start_new_user_kb,
     existing_profile_kb,
     cancel_kb,
-    user_main_kb,
     admin_participant_actions_kb,
+    quiz_options_kb,
 )
 
 from ..services.participants_service import ParticipantsService
-from ..schemas import Participant
+from ..services.polls_service import PollsService, PollResponsesService
+from ..schemas import Participant, PollQuestion, PollResponse
 from ..texts import (
     START_NEW_USER,
     PROFILE_TEMPLATE,
@@ -33,6 +34,12 @@ from ..texts import (
     REG_FINISHED,
     LEAVE_CONFIRM,
     PROFILE_NOT_FOUND,
+    QUIZ_NO_ACTIVE,
+    QUIZ_PROMPT,
+    QUIZ_ALREADY_ANSWERED,
+    QUIZ_ANSWER_CORRECT,
+    QUIZ_ANSWER_INCORRECT,
+    QUIZ_UNKNOWN_ERROR,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,6 +94,18 @@ def _looks_like_phone(text: str) -> bool:
     """
     digits = re.sub(r"\D", "", text or "")
     return len(digits) >= 10
+
+
+def _render_quiz_question(poll: PollQuestion) -> str:
+    options_lines = [
+        f"{idx + 1}. {option}"
+        for idx, option in enumerate(poll.options)
+    ]
+    options_text = "\n".join(options_lines) if options_lines else "Варианты ответа не заданы."
+    return QUIZ_PROMPT.format(
+        question=poll.question,
+        options=options_text,
+    )
 
 
 # ---------- Команды участника ----------
@@ -148,6 +167,25 @@ async def cmd_leave(message: Message) -> None:
     await message.answer(LEAVE_CONFIRM)
 
 
+@router.message(Command("quiz"))
+async def cmd_quiz(message: Message) -> None:
+    polls_service = PollsService()
+    poll = polls_service.get_active_poll()
+    if poll is None or not poll.options:
+        await message.answer(QUIZ_NO_ACTIVE)
+        return
+
+    responses_service = PollResponsesService()
+    if responses_service.has_response(poll.poll_id, message.from_user.id):
+        await message.answer(QUIZ_ALREADY_ANSWERED)
+        return
+
+    await message.answer(
+        _render_quiz_question(poll),
+        reply_markup=quiz_options_kb(poll),
+    )
+
+
 # ---------- Callback-и с кнопок ----------
 
 @router.callback_query(F.data == "register_start")
@@ -176,6 +214,65 @@ async def cq_leave_game(callback: CallbackQuery) -> None:
         await callback.message.answer(PROFILE_NOT_FOUND)
     else:
         await callback.message.answer(LEAVE_CONFIRM)
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("quiz_answer:"))
+async def cq_quiz_answer(callback: CallbackQuery) -> None:
+    data = callback.data or ""
+    try:
+        _, poll_id, answer_raw = data.split(":", 2)
+        answer_index = int(answer_raw)
+    except ValueError:
+        await callback.answer("Некорректные данные кнопки.", show_alert=True)
+        return
+
+    polls_service = PollsService()
+    poll = polls_service.get_poll_by_id(poll_id)
+    if poll is None or answer_index < 0 or answer_index >= len(poll.options):
+        await callback.answer("Эта викторина недоступна.", show_alert=True)
+        return
+
+    responses_service = PollResponsesService()
+    user_id = callback.from_user.id
+    if responses_service.has_response(poll.poll_id, user_id):
+        await callback.answer(QUIZ_ALREADY_ANSWERED, show_alert=True)
+        return
+
+    is_correct = (
+        poll.correct_index is not None
+        and answer_index == poll.correct_index
+    )
+    response = PollResponse(
+        poll_id=poll.poll_id,
+        tg_id=user_id,
+        answer_index=answer_index,
+        is_correct=is_correct,
+        submitted_at="",
+    )
+
+    try:
+        responses_service.add_response(response)
+    except Exception as e:
+        logger.exception("Failed to save quiz response: %s", e)
+        await callback.answer(QUIZ_UNKNOWN_ERROR, show_alert=True)
+        return
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    correct_option = ""
+    if poll.correct_index is not None and 0 <= poll.correct_index < len(poll.options):
+        correct_option = f"{poll.correct_index + 1}. {poll.options[poll.correct_index]}"
+
+    if is_correct:
+        text = QUIZ_ANSWER_CORRECT.format(points=poll.points)
+    else:
+        text = QUIZ_ANSWER_INCORRECT.format(correct_option=correct_option or "—")
+
+    await callback.message.answer(text)
     await callback.answer()
 
 
