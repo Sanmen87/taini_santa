@@ -63,6 +63,7 @@ class Participant:
     notified: bool = False
     admin_comment: Optional[str] = None
     updated_at: Optional[str] = None
+    row_index: Optional[int] = None
 
     @classmethod
     def from_row(cls, row: List[str]) -> "Participant":
@@ -107,6 +108,7 @@ class Participant:
             notified=notified_raw.upper() == "TRUE",
             admin_comment=admin_comment,
             updated_at=updated_at,
+            row_index=None,
         )
 
     def to_row(self) -> List[str]:

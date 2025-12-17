@@ -8,7 +8,9 @@ from typing import List, Optional
 
 import gspread
 from google.oauth2.service_account import Credentials
+from requests.adapters import HTTPAdapter
 import urllib3
+from urllib3.util.retry import Retry
 
 from .config import get_settings
 
@@ -41,14 +43,10 @@ class SheetClient:
         # Инициализируем gspread-клиент
         gc = gspread.authorize(creds)
 
-        # ⚠ ОТКЛЮЧАЕМ проверку сертификата ТОЛЬКО для Google Sheets в dev-среде.
-        if hasattr(gc, "session"):
-            try:
-                gc.session.verify = False
-                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-                logger.warning("SSL verification for Google Sheets is DISABLED (dev mode).")
-            except Exception as e:
-                logger.error("Failed to disable SSL verification for Google Sheets: %s", e)
+        session = getattr(gc, "session", None)
+        if session is not None:
+            _configure_http_session(session, settings)
+            _disable_ssl_verification(session)
 
         spreadsheet = gc.open_by_key(settings.sheets.spreadsheet_id)
 
@@ -96,3 +94,44 @@ def get_sheet_client() -> SheetClient:
     if _sheet_client_singleton is None:
         _sheet_client_singleton = SheetClient.from_settings()
     return _sheet_client_singleton
+
+
+def _configure_http_session(session, settings) -> None:
+    timeout = max(1.0, float(getattr(settings.sheets, "request_timeout", 10.0)))
+    max_retries = max(0, int(getattr(settings.sheets, "max_retries", 3)))
+    backoff = max(0.0, float(getattr(settings.sheets, "retry_backoff_factor", 0.5)))
+
+    try:
+        if max_retries > 0:
+            retry = Retry(
+                total=max_retries,
+                read=max_retries,
+                connect=max_retries,
+                status=max_retries,
+                backoff_factor=backoff,
+                status_forcelist=(429, 500, 502, 503, 504),
+                allowed_methods=frozenset(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+                raise_on_status=False,
+            )
+            adapter = HTTPAdapter(max_retries=retry)
+            session.mount("https://", adapter)
+            session.mount("http://", adapter)
+
+        original_request = session.request
+
+        def request_with_timeout(method, url, **kwargs):
+            kwargs.setdefault("timeout", timeout)
+            return original_request(method, url, **kwargs)
+
+        session.request = request_with_timeout
+    except Exception as exc:
+        logger.warning("Failed to configure Google Sheets HTTP session: %s", exc)
+
+
+def _disable_ssl_verification(session) -> None:
+    try:
+        session.verify = False
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        logger.warning("SSL verification for Google Sheets is DISABLED (dev mode).")
+    except Exception as exc:
+        logger.error("Failed to disable SSL verification for Google Sheets: %s", exc)

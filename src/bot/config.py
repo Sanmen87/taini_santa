@@ -24,6 +24,11 @@ class SheetsConfig:
     poll_responses_sheet: str
     achievements_sheet: str
     service_account_json: str  # путь к файлу
+    request_timeout: float
+    max_retries: int
+    retry_backoff_factor: float
+    participants_cache_ttl: float
+    participants_batch_chunk: int
 
 
 @dataclass
@@ -61,5 +66,10 @@ def get_settings() -> Settings:
             poll_responses_sheet=os.getenv("GSHEET_POLL_RESPONSES_SHEET_NAME", "PollResponses"),
             achievements_sheet=os.getenv("GSHEET_ACHIEVEMENTS_SHEET_NAME", "Achievements"),
             service_account_json=os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"],
+            request_timeout=float(os.getenv("GSHEET_REQUEST_TIMEOUT", "10")),
+            max_retries=int(os.getenv("GSHEET_MAX_RETRIES", "3")),
+            retry_backoff_factor=float(os.getenv("GSHEET_RETRY_BACKOFF", "0.5")),
+            participants_cache_ttl=float(os.getenv("GSHEET_PARTICIPANTS_CACHE_TTL", "10")),
+            participants_batch_chunk=int(os.getenv("GSHEET_PARTICIPANTS_BATCH_CHUNK", "40")),
         ),
     )

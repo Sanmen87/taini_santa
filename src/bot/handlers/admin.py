@@ -311,6 +311,11 @@ async def _handle_draw(message: Message) -> None:
         )
         return
 
+    if any(p.row_index is None for p in eligible):
+        logger.error("Participants list without row indexes, aborting draw")
+        await message.answer("Не удалось определить строки участников в таблице. Попробуйте позже.")
+        return
+
     random.shuffle(eligible)
 
     n = len(eligible)
@@ -326,7 +331,15 @@ async def _handle_draw(message: Message) -> None:
         )
         santa.notified = False
 
-        ps.upsert_participant(santa)
+    try:
+        ps.bulk_upsert_participants(eligible)
+    except Exception as e:
+        logger.exception("Failed to persist draw results: %s", e)
+        await message.answer(
+            "❌ Не удалось записать результаты жеребьёвки в Google Sheets.\n"
+            "Попробуйте повторить попытку чуть позже."
+        )
+        return
 
     await message.answer(
         f"Жеребьёвка завершена.\n"
